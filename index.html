@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<link rel="apple-touch-icon" href="ushiki-icon-v3.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>牛式排便理論研究室</title>
@@ -357,6 +356,41 @@
   .mini-list .item{ display:flex; justify-content:space-between; padding:4px 0; border-top:1px dashed var(--line); }
   .mini-list .item .x{ color:var(--clover); cursor:pointer; font-weight:800; padding:0 6px;}
 
+  .meal-card{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    border:2px solid var(--line);
+    background:var(--cream);
+    border-radius:var(--radius-md);
+    padding:10px 12px;
+    margin-bottom:8px;
+    cursor:pointer;
+  }
+  .meal-card .meal-top{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-weight:800;
+    font-size:13.5px;
+    color:var(--barn-dark);
+  }
+  .meal-card .meal-foods{ font-size:13px; color:var(--ink); }
+  .meal-card .meal-features{ font-size:11.5px; color:var(--pasture-dark); }
+  .meal-card .meal-memo{ font-size:12px; color:var(--ink-soft); }
+  .meal-form{
+    border:1.5px solid var(--line);
+    border-radius:var(--radius-md);
+    padding:12px;
+    margin-top:6px;
+    margin-bottom:10px;
+    background:var(--milk);
+  }
+  .meal-form .row{ display:flex; gap:8px; margin-bottom:10px; }
+  .meal-form .row > *{ flex:1; }
+  .meal-form-actions{ display:flex; gap:8px; margin-top:4px; }
+  .meal-form-actions button{ flex:1; }
+
   .csv-out{
     width:100%;
     min-height:100px;
@@ -428,7 +462,13 @@ const OPTIONS = {
   evacuation_feeling: ["スルッと出た","普通","少し力んだ","かなり力んだ","途中で止まった","複数回に分かれた"],
   incomplete_feeling: ["なし","少しあり","あり"],
   odor: ["弱い","普通","強い","かなり強い","未記録"],
-  activity_level: ["なし","少ない","普通","多い"]
+  activity_level: ["なし","少ない","普通","多い"],
+  meal_type: ["朝食","昼食","夕食","間食","その他"],
+  meal_features: ["外食","脂っこい","甘いもの","発酵食品","食物繊維多め","いつもより多い"]
+};
+
+const MEAL_TYPE_EMOJI = {
+  "朝食":"🍳", "昼食":"🍱", "夕食":"🍽️", "間食":"🍰", "その他":"🍴"
 };
 
 const BRISTOL = [
@@ -470,7 +510,8 @@ function defaultData(){
     bowelRecords: [],
     dailyLogs: {},        // date -> {...fields}
     observationDefs: [],  // [{id,name}]
-    observationLogs: []   // [{id,date,time,name,value,amount,unit,memo}]
+    observationLogs: [],  // [{id,date,time,name,value,amount,unit,memo}]
+    mealLogs: []           // [{id,date,time,meal_type,foods,features:[],memo}]
   };
 }
 
@@ -483,7 +524,9 @@ let state = {
   detailBowelId: null,
   dayDetailDate: null,
   obsAddOpenFor: null,   // observationDef id currently showing "add entry" mini form
-  obsDraft: null
+  obsDraft: null,
+  mealFormOpen: false,   // whether the meal add/edit mini form is open
+  mealDraft: null        // working copy of the meal being added/edited
 };
 
 let saveTimer = null;
@@ -808,8 +851,8 @@ function renderLifeLog(){
     </div>
 
     <div class="section">
-      <h2>食事メモ</h2>
-      <textarea id="ll-food-memo" placeholder="例：昼は外食／発酵食品多め">${log.food_memo||""}</textarea>
+      <h2>🍽️ 食事</h2>
+      ${renderMealSection(date)}
     </div>
 
     <div class="section">
@@ -849,6 +892,67 @@ function renderObsMiniForm(def){
   `;
 }
 
+function newMealDraft(date){
+  return {
+    id: uid(),
+    date: date,
+    time: nowTimeStr(),
+    meal_type: null,
+    foods: "",
+    features: [],
+    memo: ""
+  };
+}
+
+function renderMealSection(date){
+  const meals = data.mealLogs.filter(m=>m.date===date).sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+  const editingId = (state.mealFormOpen && state.mealDraft) ? state.mealDraft.id : null;
+  const visible = meals.filter(m=>m.id!==editingId);
+
+  const list = visible.map(m=>`
+    <div class="meal-card" data-action="edit-meal" data-id="${m.id}">
+      <div class="meal-top">${MEAL_TYPE_EMOJI[m.meal_type]||"🍽️"}　${m.time||""}　${escapeHtml(m.meal_type||"未分類")}</div>
+      ${m.foods ? `<div class="meal-foods">${escapeHtml(m.foods)}</div>` : ""}
+      ${m.features && m.features.length ? `<div class="meal-features">${m.features.map(escapeHtml).join("・")}</div>` : ""}
+      ${m.memo ? `<div class="meal-memo">${escapeHtml(m.memo)}</div>` : ""}
+    </div>
+  `).join("");
+
+  return `
+    ${list}
+    ${(!list && !state.mealFormOpen) ? `<div class="empty-msg" style="padding:12px 0;">まだ食事記録がありません</div>` : ""}
+    ${state.mealFormOpen ? renderMealForm() : `<div class="ghost-btn" data-action="open-meal-form">＋ 食事を追加</div>`}
+  `;
+}
+
+function renderMealForm(){
+  const d = state.mealDraft;
+  const isEdit = data.mealLogs.some(m=>m.id===d.id);
+  return `
+    <div class="meal-form">
+      <div class="field-label">食事区分</div>
+      <div class="btn-grid">
+        ${OPTIONS.meal_type.map(t=>`<div class="opt-btn ${d.meal_type===t?'selected':''}" data-action="mealdraft-set" data-field="meal_type" data-value="${t}">${t}</div>`).join("")}
+      </div>
+      <div class="field-label">時刻</div>
+      <input type="time" id="meal-time" value="${d.time}">
+      <div class="field-label">食べたもの</div>
+      <input type="text" id="meal-foods" placeholder="例：玄米、卵、味噌汁" value="${escapeHtml(d.foods)}">
+      <div class="field-label">食事の特徴（複数選択可）</div>
+      <div class="btn-grid">
+        ${OPTIONS.meal_features.map(f=>`<div class="opt-btn ${d.features.includes(f)?'selected':''}" data-action="mealdraft-toggle-feature" data-value="${f}">${f}</div>`).join("")}
+      </div>
+      <div class="field-label">ひとことメモ</div>
+      <textarea id="meal-memo" placeholder="任意">${d.memo||""}</textarea>
+      <div class="meal-form-actions">
+        <button class="small-btn" data-action="confirm-meal">${isEdit?"保存する":"追加する"}</button>
+        <button class="small-btn" style="background:#B8A88A;" data-action="cancel-meal-entry">やめる</button>
+      </div>
+      ${isEdit ? `<button class="delete-btn" style="margin-top:8px;" data-action="delete-meal" data-id="${d.id}">この食事記録を削除</button>` : ""}
+    </div>
+  `;
+}
+
 function bindLifeLogEvents(){
   const date = state.lifeLogDate || todayStr();
   const log = ensureDailyLog(date);
@@ -862,7 +966,6 @@ function bindLifeLogEvents(){
   bind("ll-steps","steps");
   bind("ll-ex-memo","exercise_memo");
   bind("ll-water","water_ml");
-  bind("ll-food-memo","food_memo");
   bind("ll-daily-memo","daily_memo");
 
   const dateInput = document.getElementById("lifelog-date");
@@ -870,6 +973,8 @@ function bindLifeLogEvents(){
     dateInput.addEventListener("change",(e)=>{
       state.lifeLogDate = e.target.value;
       state.obsAddOpenFor = null;
+      state.mealFormOpen = false;
+      state.mealDraft = null;
       render();
     });
   }
@@ -881,6 +986,17 @@ function bindLifeLogEvents(){
         if(!state.obsDraft) return;
         const map = {"obs-time":"time","obs-amount":"amount","obs-unit":"unit","obs-memo":"memo"};
         state.obsDraft[map[id]] = e.target.value;
+      });
+    }
+  });
+
+  ["meal-time","meal-foods","meal-memo"].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener("input",(e)=>{
+        if(!state.mealDraft) return;
+        const map = {"meal-time":"time","meal-foods":"foods","meal-memo":"memo"};
+        state.mealDraft[map[id]] = e.target.value;
       });
     }
   });
@@ -1011,6 +1127,14 @@ function buildObsCsv(){
   return [header, ...rows].map(row=>row.map(csvEscape).join(",")).join("\n");
 }
 
+function buildMealCsv(){
+  const header = ["meal_id","date","time","meal_type","foods","features","memo"];
+  const rows = data.mealLogs.slice().sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||""))).map(m=>[
+    m.id, m.date, m.time ?? "", m.meal_type ?? "", m.foods ?? "", (m.features||[]).join("/"), m.memo ?? ""
+  ]);
+  return [header, ...rows].map(row=>row.map(csvEscape).join(",")).join("\n");
+}
+
 function downloadCsv(filename, content){
   try{
     const blob = new Blob(["\uFEFF"+content], {type:"text/csv;charset=utf-8;"});
@@ -1052,6 +1176,14 @@ function renderExport(){
         <button class="small-btn" style="background:#B8A88A;" data-action="show-obs-csv">表示</button>
       </div>
       <div id="obs-csv-out"></div>
+    </div>
+    <div class="section">
+      <h2>meal_log.csv（食事記録：${data.mealLogs.length}件）</h2>
+      <div class="export-row">
+        <button class="small-btn" data-action="dl-meal-csv">📥 ダウンロード</button>
+        <button class="small-btn" style="background:#B8A88A;" data-action="show-meal-csv">表示</button>
+      </div>
+      <div id="meal-csv-out"></div>
     </div>
     <div class="empty-msg" style="padding:0 4px;">ダウンロードがうまくいかない場合は「表示」を押して、テキストを長押し選択してコピーしてください。</div>
   `;
@@ -1202,9 +1334,67 @@ document.getElementById("app").addEventListener("click", async (e)=>{
       render();
       break;
 
+    case "open-meal-form": {
+      const date = state.lifeLogDate || todayStr();
+      state.mealDraft = newMealDraft(date);
+      state.mealFormOpen = true;
+      render();
+      break;
+    }
+    case "edit-meal": {
+      const m = data.mealLogs.find(x=>x.id===el.dataset.id);
+      if(m){
+        state.mealDraft = Object.assign({}, m, {features: (m.features||[]).slice()});
+        state.mealFormOpen = true;
+        render();
+      }
+      break;
+    }
+    case "cancel-meal-entry":
+      state.mealFormOpen = false;
+      state.mealDraft = null;
+      render();
+      break;
+    case "mealdraft-set":
+      state.mealDraft[el.dataset.field] = el.dataset.value;
+      render();
+      break;
+    case "mealdraft-toggle-feature": {
+      const v = el.dataset.value;
+      const idx = state.mealDraft.features.indexOf(v);
+      if(idx>=0){ state.mealDraft.features.splice(idx,1); }
+      else { state.mealDraft.features.push(v); }
+      render();
+      break;
+    }
+    case "confirm-meal": {
+      const d = state.mealDraft;
+      if(!d.meal_type){ showToast("食事区分を選択してください"); break; }
+      const idx = data.mealLogs.findIndex(m=>m.id===d.id);
+      if(idx>=0){ data.mealLogs[idx] = Object.assign({}, d); }
+      else { data.mealLogs.push(Object.assign({}, d)); }
+      state.mealFormOpen = false;
+      state.mealDraft = null;
+      await persist();
+      render();
+      showToast("🍽️ 食事を記録しました");
+      break;
+    }
+    case "delete-meal":
+      if(confirm("この食事記録を削除しますか？")){
+        data.mealLogs = data.mealLogs.filter(m=>m.id!==el.dataset.id);
+        state.mealFormOpen = false;
+        state.mealDraft = null;
+        await persist();
+        render();
+        showToast("削除しました");
+      }
+      break;
+
     case "dl-bowel-csv": downloadCsv("bowel_log.csv", buildBowelCsv()); break;
     case "dl-daily-csv": downloadCsv("daily_log.csv", buildDailyCsv()); break;
     case "dl-obs-csv": downloadCsv("observation_log.csv", buildObsCsv()); break;
+    case "dl-meal-csv": downloadCsv("meal_log.csv", buildMealCsv()); break;
     case "show-bowel-csv":
       document.getElementById("bowel-csv-out").innerHTML = `<textarea class="csv-out" readonly>${escapeHtml(buildBowelCsv())}</textarea>`;
       break;
@@ -1213,6 +1403,9 @@ document.getElementById("app").addEventListener("click", async (e)=>{
       break;
     case "show-obs-csv":
       document.getElementById("obs-csv-out").innerHTML = `<textarea class="csv-out" readonly>${escapeHtml(buildObsCsv())}</textarea>`;
+      break;
+    case "show-meal-csv":
+      document.getElementById("meal-csv-out").innerHTML = `<textarea class="csv-out" readonly>${escapeHtml(buildMealCsv())}</textarea>`;
       break;
   }
 });
