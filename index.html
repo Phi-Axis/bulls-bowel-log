@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>牛式排便理論研究室</title>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7A4A2B">
 <style>
   :root{
     --cream:#FBF3E3;
@@ -23,7 +26,7 @@
     --radius-sm:9px;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0; overflow-x:hidden;}
   body{
     background:var(--cream);
     color:var(--ink);
@@ -175,14 +178,18 @@
   }
   .opt-btn.na{ opacity:.7; }
 
-  .star-row{ display:flex; gap:8px; }
+  .star-row{ display:flex; gap:clamp(3px,1.3vw,7px); width:100%; }
   .star-btn{
-    flex:1;
+    flex:1 1 0;
+    min-width:0;
     background:var(--cream);
     border:2px solid var(--line);
     border-radius:var(--radius-md);
-    padding:10px 4px;
-    font-size:17px;
+    padding:8px 1px;
+    font-size:clamp(8px,2.85vw,13px);
+    letter-spacing:-1.2px;
+    white-space:nowrap;
+    overflow:hidden;
     cursor:pointer;
     color:var(--butter);
     text-align:center;
@@ -191,7 +198,7 @@
     background:#FFF3D6;
     border-color:var(--butter);
   }
-  .star-btn .num{ display:block; font-size:11px; color:var(--ink-soft); margin-top:2px; font-weight:700;}
+  .star-btn .num{ display:block; font-size:clamp(9px,2.6vw,11px); color:var(--ink-soft); margin-top:2px; font-weight:700;}
 
   .bristol-grid{ display:flex; flex-direction:column; gap:8px; }
   .bristol-item{
@@ -217,18 +224,48 @@
   .bristol-item .desc{ font-size:13px; }
 
   textarea, input[type=number], input[type=date], input[type=time]{
+    box-sizing:border-box;
     width:100%;
+    min-width:0;
+    max-width:100%;
     border:2px solid var(--line);
     border-radius:var(--radius-sm);
-    padding:10px 12px;
-    font-size:14px;
+    padding:10px 8px;
+    font-size:clamp(12px,3.6vw,14px);
     font-family:inherit;
     background:var(--cream);
     color:var(--ink);
   }
   textarea{ min-height:64px; resize:vertical; }
-  .datetime-row{ display:flex; gap:8px; }
-  .datetime-row > div{ flex:1; }
+
+  /* 「日時」カードだけに閉じたレイアウト（他の入力欄には影響しません） */
+  .datetime-card{
+    box-sizing:border-box;
+    padding-left:16px;
+    padding-right:16px;
+  }
+  .datetime-row{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:10px;
+    width:100%;
+    box-sizing:border-box;
+  }
+  .datetime-col{
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+  }
+  .datetime-col input{
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+    padding:10px 6px;
+    font-size:clamp(11px,3.2vw,14px);
+  }
 
   .save-btn{
     display:block;
@@ -647,11 +684,11 @@ function renderBowelForm(){
       <h1>💩 排便を記録する</h1>
     </div>
 
-    <div class="section">
+    <div class="section datetime-card">
       <h2>日時</h2>
       <div class="datetime-row">
-        <div><input type="date" value="${d.date}" data-field="date" class="draft-input"></div>
-        <div><input type="time" value="${d.time}" data-field="time" class="draft-input"></div>
+        <div class="datetime-col"><input type="date" value="${d.date}" data-field="date" class="draft-input"></div>
+        <div class="datetime-col"><input type="time" value="${d.time}" data-field="time" class="draft-input"></div>
       </div>
     </div>
 
